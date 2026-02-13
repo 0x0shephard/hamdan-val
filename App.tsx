@@ -11,27 +11,35 @@ const App: React.FC = () => {
 
   // Refs for button dimensions to ensure it stays in viewport
   const containerRef = useRef<HTMLDivElement>(null);
+  const noBtnRef = useRef<HTMLButtonElement>(null);
 
   // --- Logic for the Evasive "No" Button ---
   const moveNoButton = () => {
-    // Estimated dimensions of the button + padding
-    // We overestimate slightly to ensure it never clips the edge
-    const btnWidth = 200; 
-    const btnHeight = 100;
+    // Get actual button dimensions if available, otherwise use estimates
+    let btnWidth = 200;
+    let btnHeight = 100;
+
+    if (noBtnRef.current) {
+      const rect = noBtnRef.current.getBoundingClientRect();
+      btnWidth = rect.width;
+      btnHeight = rect.height;
+    }
+
+    // Add padding to ensure button stays comfortably within viewport
     const padding = 20;
+    const safetyMargin = 10; // Extra margin for safety
 
-    // Calculate the maximum allowed left/top positions within the viewport
-    const maxLeft = window.innerWidth - btnWidth - padding;
-    const maxTop = window.innerHeight - btnHeight - padding;
+    // Calculate available space for the button to move
+    const availableWidth = window.innerWidth - btnWidth - (2 * padding) - safetyMargin;
+    const availableHeight = window.innerHeight - btnHeight - (2 * padding) - safetyMargin;
 
-    // Generate random position, ensuring it starts at least at 'padding' pixels
-    // and doesn't exceed the calculated max values.
-    // Math.max(0, ...) protects against very small screens where bounds might differ.
-    const newLeft = padding + Math.random() * Math.max(0, maxLeft - padding);
-    const newTop = padding + Math.random() * Math.max(0, maxTop - padding);
+    // Generate random position within safe boundaries
+    // Ensure we have positive space to work with
+    const newLeft = padding + Math.random() * Math.max(0, availableWidth);
+    const newTop = padding + Math.random() * Math.max(0, availableHeight);
 
     setNoBtnPos({ left: newLeft, top: newTop });
-    
+
     // Make the Yes button grow slightly every time they try to click No
     setYesBtnScale(prev => Math.min(prev + 0.1, 2.0));
     setNoHoverCount(prev => prev + 1);
@@ -40,6 +48,48 @@ const App: React.FC = () => {
   const handleYesClick = () => {
     setStage(AppStage.ACCEPTED);
   };
+
+  // Handle window resize to keep button in bounds
+  useEffect(() => {
+    const handleResize = () => {
+      if (noBtnPos && noBtnRef.current) {
+        const rect = noBtnRef.current.getBoundingClientRect();
+        const padding = 20;
+        const safetyMargin = 10;
+
+        let newLeft = noBtnPos.left;
+        let newTop = noBtnPos.top;
+        let needsUpdate = false;
+
+        // Check if button is out of bounds horizontally
+        if (newLeft + rect.width > window.innerWidth - padding) {
+          newLeft = window.innerWidth - rect.width - padding - safetyMargin;
+          needsUpdate = true;
+        }
+        if (newLeft < padding) {
+          newLeft = padding;
+          needsUpdate = true;
+        }
+
+        // Check if button is out of bounds vertically
+        if (newTop + rect.height > window.innerHeight - padding) {
+          newTop = window.innerHeight - rect.height - padding - safetyMargin;
+          needsUpdate = true;
+        }
+        if (newTop < padding) {
+          newTop = padding;
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          setNoBtnPos({ left: newLeft, top: newTop });
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [noBtnPos]);
 
   // --- Render Proposal Stage ---
   const renderProposal = () => {
@@ -104,6 +154,7 @@ const App: React.FC = () => {
 
                 {/* NO Card/Button (Evasive) */}
                 <button
+                    ref={noBtnRef}
                     onMouseEnter={moveNoButton}
                     onClick={moveNoButton}
                     style={isFixed && noBtnPos ? {
